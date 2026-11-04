@@ -1,0 +1,44 @@
+{
+  "filters": {"retailers": [{"id": 1, "name": "Kaufland", "resultsCount": 1}]},
+  "totalResults": 2,
+  "skippedResults": 0,
+  "results": [
+    {
+      "id": 111,
+      "description": "wuerzig, aus eigener Herstellung",
+      "price": 1.99,
+      "oldPrice": 2.99,
+      "referencePrice": 19.9,
+      "quantity": 1.0,
+      "volume": 1.0,
+      "brand": {"uniqueName": "k-classic", "name": "K-Classic"},
+      "unit": {"shortName": "kg"},
+      "advertisers": [{"uniqueName": "kaufland", "name": "Kaufland"}],
+      "categories": [{"id": 1, "name": "Wurst"}],
+      "validityDates": [
+        {"from": "2026-11-01T23:00:00Z", "to": "2026-11-07T18:00:00Z"}
+      ],
+      "product": {"id": 1, "name": "Schinkenknacker"},
+      "images": {"urls": {"medium": "https://img.example/1.jpg"}},
+      "externalUrl": "https://www.marktguru.de/offers/111"
+    },
+    {
+      "id": 222,
+      "description": "versch. Sorten",
+      "price": 0.99,
+      "oldPrice": null,
+      "quantity": null,
+      "volume": 1.5,
+      "brand": {"uniqueName": "ja", "name": "Ja!"},
+      "unit": {"shortName": "l"},
+      "advertisers": [{"uniqueName": "lidl", "name": "Lidl"}],
+      "categories": [{"id": 2, "name": "Getraenke"}],
+      "validityDates": [
+        {"from": "2026-11-01T23:00:00Z", "to": "2026-11-07T18:00:00Z"}
+      ],
+      "product": {"id": 2, "name": "Mineralwasser"},
+      "images": {"urls": {"medium": "https://img.example/2.jpg"}},
+      "externalUrl": null
+    }
+  ]
+}

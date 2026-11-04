@@ -1,0 +1,31 @@
+{
+  "url": "https://www.kaufda.de/Teststadt/Kaufland/p-r1",
+  "offers": {
+    "main": {
+      "items": [
+        {
+          "type": "OFFER",
+          "id": "abc-123",
+          "title": "Bohrmaschine",
+          "description": "mit 750 W Leistung",
+          "brand": "Parkside",
+          "categories": ["Bohrmaschinen"],
+          "validFrom": "2026-11-01T23:00:00.000+0000",
+          "validUntil": "2026-11-07T18:00:00.000+0000",
+          "prices": {
+            "mainPrice": 19.99,
+            "secondaryPrice": 29.99,
+            "priceByBaseUnit": ""
+          },
+          "offerImages": {
+            "url": {"large": "https://img.example/bohrer.jpg"}
+          }
+        },
+        {
+          "type": "BROCHURE",
+          "id": "ignored"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+[Unit]
+Description=PrivatEinkaufsTracker – Wochenangebote einsammeln
+Documentation=https://github.com/HatchetMan111/PrivatEinkaufsTracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=offers
+Group=offers
+WorkingDirectory=/opt/offers-dashboard
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/offers-dashboard/app
+Environment=OFFERS_DB=/var/lib/offers-dashboard/offers.db
+EnvironmentFile=-/etc/offers-dashboard/config.env
+ExecStart=/opt/offers-dashboard/.venv/bin/python -m offers_dashboard.collect --all
+TimeoutStartSec=1800
+StateDirectory=offers-dashboard
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

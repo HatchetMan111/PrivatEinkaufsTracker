@@ -1,0 +1,29 @@
+[Unit]
+Description=PrivatEinkaufsTracker (FastAPI)
+Documentation=https://github.com/HatchetMan111/PrivatEinkaufsTracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=offers
+Group=offers
+WorkingDirectory=/opt/offers-dashboard
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/offers-dashboard/app
+Environment=OFFERS_DB=/var/lib/offers-dashboard/offers.db
+Environment=OFFERS_PORT=8000
+EnvironmentFile=-/etc/offers-dashboard/config.env
+ExecStart=/opt/offers-dashboard/.venv/bin/python -m uvicorn offers_dashboard.api:app --host 0.0.0.0 --port ${OFFERS_PORT}
+Restart=always
+RestartSec=5
+StateDirectory=offers-dashboard
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

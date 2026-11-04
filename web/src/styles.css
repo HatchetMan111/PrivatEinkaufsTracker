@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-paper text-ink antialiased dark:bg-[#141413] dark:text-[#f2efe9];
+    font-feature-settings: "ss01" on, "cv11" on;
+  }
+  ::selection {
+    @apply bg-accentsoft text-accent dark:bg-accent dark:text-white;
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-2xl border border-line bg-white shadow-card dark:border-[#2a2926] dark:bg-[#1c1b19];
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-ink/30 hover:bg-black/[.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 dark:border-[#2a2926] dark:bg-[#1c1b19] dark:text-[#f2efe9] dark:hover:bg-white/5;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-white hover:bg-[#194c3b] hover:border-[#194c3b];
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition hover:border-ink/30 hover:text-ink dark:border-[#2a2926] dark:text-[#a8a29a] dark:hover:text-white;
+  }
+  .chip-active {
+    @apply border-accent bg-accentsoft text-accent dark:border-accent dark:bg-accent/20 dark:text-[#bfe3d2];
+  }
+  .field {
+    @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-[#2a2926] dark:bg-[#1c1b19] dark:text-[#f2efe9];
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-muted;
+  }
+}
+
+.chart-tooltip {
+  @apply rounded-xl border border-line bg-white px-3 py-2 text-xs shadow-card dark:border-[#2a2926] dark:bg-[#1c1b19];
+}

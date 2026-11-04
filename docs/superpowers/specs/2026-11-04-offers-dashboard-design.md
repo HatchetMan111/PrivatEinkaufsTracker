@@ -392,7 +392,7 @@ offers-dashboard-proxmox/
 ### 12.2 Einzeiler
 
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/OffersDashboardProxmox/main/install/offers-dashboard.sh)"
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/PrivatEinkaufsTracker/main/install/offers-dashboard.sh)"
 ```
 
 ### 12.3 Flags / Umgebungsvariablen
@@ -431,8 +431,8 @@ Migrationen aus und startet den Dienst neu.
 OFFERS_DB=/var/lib/offers-dashboard/offers.db
 OFFERS_PORT=8000
 OFFERS_TZ=Europe/Berlin
-SCHEDULE_CALENDAR=Mon 06:00
-KAUFDA_USER_AGENT=offers-dashboard/1.0 (privater Eigenbedarf)
+SCHEDULE_CALENDAR=Mon *-*-* 06:00:00 Europe/Berlin
+# OFFERS_USER_AGENT=Mozilla/5.0 (optional)
 ```
 
 Orte und Händler liegen in der DB und werden über die UI verwaltet.

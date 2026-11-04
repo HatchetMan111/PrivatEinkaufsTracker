@@ -1,0 +1,12 @@
+[Unit]
+Description=PrivatEinkaufsTracker – montäglicher Sammel-Lauf
+Documentation=https://github.com/HatchetMan111/PrivatEinkaufsTracker
+
+[Timer]
+OnCalendar=Mon *-*-* 06:00:00 Europe/Berlin
+Persistent=true
+RandomizedDelaySec=15m
+Unit=offers-dashboard-collect.service
+
+[Install]
+WantedBy=timers.target
