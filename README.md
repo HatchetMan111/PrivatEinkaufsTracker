@@ -66,7 +66,7 @@ privaten Repo vorher manuell klonen und `install/update.sh` im Container nutzen.
 
 ## Bedienung
 
-- **Übersicht:** Ort und Woche wählen, suchen, nach Kategorie filtern.
+- **Übersicht:** Ort und Woche wählen, suchen, nach Markt und Kategorie filtern und nach besten Rabatten, Ersparnis oder Preis sortieren.
   Karten zeigen Preis, Streichpreis, Rabatt, Händler und Gültigkeit.
 - **Produktdetail:** Preisentwicklung als Chart, alle Angebote der Wochen,
   Aktionen **Zusammenführen** und **Abtrennen**, um die automatische

@@ -108,3 +108,54 @@ def test_update_location_and_retailer_toggle(db_path):
         assert off.status_code == 200 and off.json()["active"] == 0
         on = client.put(f"/api/retailers/{target['id']}", json={"active": True})
         assert on.status_code == 200 and on.json()["active"] == 1
+
+
+def test_offers_sorting_and_retailer_filter(db_path):
+    with _client(db_path) as client:
+        location = client.post(
+            "/api/locations", json={"name": "Rothenburg", "zip": "91541"}
+        ).json()
+        conn = connect(db_path)
+        retailer_ids = {
+            row["slug"]: row["id"] for row in conn.execute("SELECT id, slug FROM retailers")
+        }
+        rows = [
+            ("a", retailer_ids["kaufland"], "Kaffee", 5.0, 10.0),
+            ("b", retailer_ids["lidl"], "Waschmittel", 8.0, 10.0),
+            ("c", retailer_ids["kaufland"], "Brot", 2.0, None),
+        ]
+        for external_id, retailer_id, title, price, old_price in rows:
+            conn.execute(
+                "INSERT INTO offers (location_id, retailer_id, source, external_id, title, price, "
+                "old_price, week_start, fetched_at) VALUES (?, ?, 'marktguru', ?, ?, ?, ?, ?, ?)",
+                (
+                    location["id"],
+                    retailer_id,
+                    external_id,
+                    title,
+                    price,
+                    old_price,
+                    current_week().isoformat(),
+                    utc_now(),
+                ),
+            )
+        conn.commit()
+        conn.close()
+
+        def titles(**params):
+            response = client.get("/api/offers", params=params)
+            assert response.status_code == 200
+            return [item["title"] for item in response.json()["items"]]
+
+        assert titles(sort="discount") == ["Kaffee", "Waschmittel", "Brot"]
+        assert titles(sort="saving") == ["Kaffee", "Waschmittel", "Brot"]
+        assert titles(sort="price_asc") == ["Brot", "Kaffee", "Waschmittel"]
+        assert titles(sort="price_desc") == ["Waschmittel", "Kaffee", "Brot"]
+        assert titles(retailers="kaufland") == ["Kaffee", "Brot"]
+        assert titles(retailers="lidl,kaufland") == ["Kaffee", "Waschmittel", "Brot"]
+        assert titles(retailer="lidl") == ["Waschmittel"]
+        assert client.get("/api/offers", params={"sort": "bogus"}).status_code == 422
+
+        best = client.get("/api/stats").json()["best_discount"]
+        assert best["percent"] == 50
+        assert best["saving"] == 5

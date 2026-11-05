@@ -10,20 +10,31 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, type Location, type OffersResponse, type Run, type Stats } from "../api";
+import {
+  api,
+  type Location,
+  type OfferSort,
+  type OffersResponse,
+  type Retailer,
+  type Run,
+  type Stats,
+} from "../api";
 import { OfferCard } from "../components/OfferCard";
 import { TopBar } from "../components/TopBar";
-import { formatDate, formatPrice, formatWeek } from "../format";
+import { formatDate, formatWeek } from "../format";
 
 type Week = "current" | "previous";
 
 export function Dashboard() {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [retailerList, setRetailerList] = useState<Retailer[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | "">("");
   const [week, setWeek] = useState<Week>("current");
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [category, setCategory] = useState<string>("");
+  const [selectedRetailers, setSelectedRetailers] = useState<string[]>([]);
+  const [sort, setSort] = useState<OfferSort>("discount");
   const [offers, setOffers] = useState<OffersResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -33,10 +44,11 @@ export function Dashboard() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.locations(), api.runs()])
-      .then(([locationList, runList]) => {
+    Promise.all([api.locations(), api.retailers(), api.runs()])
+      .then(([locationList, retailerOptions, runList]) => {
         if (!active) return;
         setLocations(locationList);
+        setRetailerList(retailerOptions);
         setRuns(runList);
         const stored = Number(localStorage.getItem("location"));
         const initial = locationList.find((item) => item.id === stored) ?? locationList[0];
@@ -69,6 +81,8 @@ export function Dashboard() {
         location_id: selectedLocation,
         week,
         q: appliedQuery || undefined,
+        retailers: selectedRetailers.join(",") || undefined,
+        sort,
       };
       const [offersResponse, statsResponse] = await Promise.all([
         api.offers(params),
@@ -82,7 +96,7 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [selectedLocation, week, appliedQuery]);
+  }, [selectedLocation, week, appliedQuery, selectedRetailers, sort]);
 
   useEffect(() => {
     void load();
@@ -109,6 +123,12 @@ export function Dashboard() {
       setError((err as Error).message);
       setRefreshing(false);
     }
+  };
+
+  const toggleRetailer = (slug: string) => {
+    setSelectedRetailers((current) =>
+      current.includes(slug) ? current.filter((item) => item !== slug) : [...current, slug]
+    );
   };
 
   const categories = useMemo(() => {
@@ -232,30 +252,78 @@ export function Dashboard() {
           <Kpi icon={<PackageOpen size={16} />} label="Produkte" value={stats?.new_products ?? 0} />
           <Kpi
             icon={<TrendingDown size={16} />}
-            label="Beste Ersparnis"
-            value={stats?.best_discount ? formatPrice(stats.best_discount.saving) : "–"}
-            hint={stats?.best_discount?.title}
+            label="Bester Deal"
+            value={stats?.best_discount ? `−${stats.best_discount.percent} %` : "–"}
+            hint={
+              stats?.best_discount
+                ? `${stats.best_discount.title} · ${stats.best_discount.retailer_name}`
+                : undefined
+            }
           />
         </section>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`chip ${category === "" ? "chip-active" : ""}`}
-            onClick={() => setCategory("")}
-          >
-            Alle
-          </button>
-          {categories.map((value) => (
+        <div className="mt-6 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Markt
+            </span>
             <button
-              key={value}
               type="button"
-              className={`chip ${category === value ? "chip-active" : ""}`}
-              onClick={() => setCategory(value === category ? "" : value)}
+              className={`chip ${selectedRetailers.length === 0 ? "chip-active" : ""}`}
+              onClick={() => setSelectedRetailers([])}
             >
-              {value}
+              Alle
             </button>
-          ))}
+            {retailerList.map((item) => (
+              <button
+                key={item.slug}
+                type="button"
+                className={`chip ${selectedRetailers.includes(item.slug) ? "chip-active" : ""}`}
+                onClick={() => toggleRetailer(item.slug)}
+              >
+                {item.name}
+              </button>
+            ))}
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em]">
+                Sortierung
+              </span>
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as OfferSort)}
+                className="field w-auto py-1.5 pr-8 text-xs"
+                aria-label="Angebote sortieren"
+              >
+                <option value="discount">Beste Deals (% Rabatt)</option>
+                <option value="saving">Höchste Ersparnis (€)</option>
+                <option value="price_asc">Preis aufsteigend</option>
+                <option value="price_desc">Preis absteigend</option>
+                <option value="title">Name A–Z</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Kategorie
+            </span>
+            <button
+              type="button"
+              className={`chip ${category === "" ? "chip-active" : ""}`}
+              onClick={() => setCategory("")}
+            >
+              Alle
+            </button>
+            {categories.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`chip ${category === value ? "chip-active" : ""}`}
+                onClick={() => setCategory(value === category ? "" : value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (

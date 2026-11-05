@@ -36,6 +36,8 @@ export type Offer = {
   product_id: number | null;
 };
 
+export type OfferSort = "discount" | "saving" | "price_asc" | "price_desc" | "title" | "newest";
+
 export type OffersResponse = {
   week_start: string;
   total: number;
@@ -55,6 +57,7 @@ export type Stats = {
     price: number;
     old_price: number;
     saving: number;
+    percent: number;
     retailer_name: string;
   } | null;
 };

@@ -166,8 +166,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         location_id: int | None = None,
         week: str = Query("current"),
         retailer: str | None = None,
+        retailers: str | None = None,
         category: str | None = None,
         q: str | None = None,
+        sort: str = Query("discount", pattern="^(discount|saving|price_asc|price_desc|title|newest)$"),
         limit: int = Query(200, ge=1, le=1000),
         offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
@@ -177,7 +179,12 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         if location_id is not None:
             clauses.append("o.location_id = ?")
             params.append(location_id)
-        if retailer:
+        if retailers:
+            slugs = [slug.strip() for slug in retailers.split(",") if slug.strip()]
+            if slugs:
+                clauses.append(f"r.slug IN ({', '.join('?' for _ in slugs)})")
+                params.extend(slugs)
+        elif retailer:
             clauses.append("r.slug = ?")
             params.append(retailer)
         if category:
@@ -188,6 +195,18 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             like = f"%{q}%"
             params.extend([like, like, like])
         where = " AND ".join(clauses)
+        order_by = {
+            "discount": (
+                "(CASE WHEN o.old_price IS NOT NULL AND o.old_price > o.price "
+                "THEN (o.old_price - o.price) * 1.0 / o.old_price ELSE 0 END) DESC, "
+                "(COALESCE(o.old_price, o.price) - o.price) DESC, o.price ASC, o.title"
+            ),
+            "saving": "(COALESCE(o.old_price, o.price) - o.price) DESC, o.price ASC, o.title",
+            "price_asc": "o.price ASC, o.title",
+            "price_desc": "o.price DESC, o.title",
+            "title": "o.title COLLATE NOCASE ASC",
+            "newest": "o.id DESC",
+        }[sort]
         conn = db()
         try:
             total = conn.execute(
@@ -205,7 +224,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
                 JOIN retailers r ON r.id = o.retailer_id
                 LEFT JOIN product_links pl ON pl.offer_id = o.id
                 WHERE {where}
-                ORDER BY (COALESCE(o.old_price, o.price) - o.price) DESC, o.title
+                ORDER BY {order_by}
                 LIMIT ? OFFSET ?
                 """,
                 [*params, limit, offset],
@@ -263,10 +282,12 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             best = conn.execute(
                 f"""
                 SELECT o.title, o.price, o.old_price,
-                       (o.old_price - o.price) AS saving, r.name AS retailer_name, o.id
+                       (o.old_price - o.price) AS saving,
+                       ROUND((o.old_price - o.price) * 100.0 / o.old_price) AS percent,
+                       r.name AS retailer_name, o.id
                 FROM offers o JOIN retailers r ON r.id = o.retailer_id
                 WHERE {clause} AND o.old_price IS NOT NULL AND o.old_price > o.price
-                ORDER BY saving DESC LIMIT 1
+                ORDER BY (o.old_price - o.price) * 1.0 / o.old_price DESC, saving DESC LIMIT 1
                 """,
                 params,
             ).fetchone()

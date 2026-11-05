@@ -307,7 +307,7 @@ Schlägt sie fehl, wird der Lauf als `partial` markiert und im UI angezeigt.
 | PUT | `/api/locations/{id}` | Ort ändern |
 | DELETE | `/api/locations/{id}` | Ort deaktivieren |
 | GET | `/api/retailers` | Händler |
-| GET | `/api/offers` | Filter: `location_id`, `week=current\|previous\|YYYY-Www`, `retailer`, `category`, `q` |
+| GET | `/api/offers` | Filter: `location_id`, `week=current\|previous\|YYYY-Www`, `retailer`/`retailers` (kommagetrennt), `category`, `q`; Sortierung: `sort=discount\|saving\|price_asc\|price_desc\|title\|newest` |
 | GET | `/api/offers/{id}` | Detail |
 | GET | `/api/stats` | KPIs je Woche/Ort |
 | GET | `/api/products` | Suche/Liste |
@@ -343,7 +343,8 @@ Dark Mode als Umschalter. Responsive ab 360 px.
   Theme-Umschalter.
 - KPI-Zeile: Anzahl Angebote, größte Rabatte, neue Produkte dieser Woche.
 - Tabs „Diese Woche“ / „Vorwoche“.
-- Kategorie-Chips als Filter.
+- Markt-Chips (mehrfach) und Kategorie-Chips als Filter.
+- Sortierung: beste Rabatte in Prozent (Standard), höchste Ersparnis, Preis auf-/absteigend, Name.
 - Karten-Grid: Produktbild, Titel, Preis, Streichpreis, Rabatt-Badge,
   Händler, gültig bis, Link zum Prospekt.
 - Leerzustand: Hinweis, wenn für die Woche noch keine Daten vorliegen, mit
