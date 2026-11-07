@@ -196,12 +196,19 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             params.extend([like, like, like])
         where = " AND ".join(clauses)
         order_by = {
+            # Prozent-Rabatt zuerst, absolute Ersparnis als Tiebreaker
             "discount": (
                 "(CASE WHEN o.old_price IS NOT NULL AND o.old_price > o.price "
                 "THEN (o.old_price - o.price) * 1.0 / o.old_price ELSE 0 END) DESC, "
                 "(COALESCE(o.old_price, o.price) - o.price) DESC, o.price ASC, o.title"
             ),
-            "saving": "(COALESCE(o.old_price, o.price) - o.price) DESC, o.price ASC, o.title",
+            # Absolute Ersparnis zuerst, Prozent-Rabatt als Tiebreaker
+            "saving": (
+                "(COALESCE(o.old_price, o.price) - o.price) DESC, "
+                "(CASE WHEN o.old_price IS NOT NULL AND o.old_price > o.price "
+                "THEN (o.old_price - o.price) * 1.0 / o.old_price ELSE 0 END) DESC, "
+                "o.price ASC, o.title"
+            ),
             "price_asc": "o.price ASC, o.title",
             "price_desc": "o.price DESC, o.title",
             "title": "o.title COLLATE NOCASE ASC",

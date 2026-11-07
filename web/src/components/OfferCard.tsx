@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import type { Offer } from "../api";
 import { discountPercent, formatDate, formatPrice, initials, retailerColor } from "../format";
 
-export function OfferCard({ offer }: { offer: Offer }) {
+export function OfferCard({ offer, sortBy }: { offer: Offer; sortBy?: string }) {
   const discount = discountPercent(offer);
   const saving = offer.old_price && offer.old_price > offer.price ? offer.old_price - offer.price : null;
   const productUrl = offer.product_id ? `/products/${offer.product_id}` : null;
@@ -28,7 +28,11 @@ export function OfferCard({ offer }: { offer: Offer }) {
           </span>
         )}
         {discount !== null && (
-          <span className="absolute left-3 top-3 rounded-full bg-danger px-2.5 py-1 text-[11px] font-bold text-white">
+          <span
+            className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold text-white ${
+              sortBy === "discount" ? "bg-danger" : "bg-danger/80"
+            }`}
+          >
             −{discount}%
           </span>
         )}
@@ -73,7 +77,13 @@ export function OfferCard({ offer }: { offer: Offer }) {
         </div>
 
         {saving !== null && (
-          <div className="text-[11px] font-semibold text-accenttext">
+          <div
+            className={
+              sortBy === "saving"
+                ? "text-[12px] font-bold text-accenttext"
+                : "text-[11px] font-semibold text-muted"
+            }
+          >
             Du sparst {formatPrice(saving)}
           </div>
         )}

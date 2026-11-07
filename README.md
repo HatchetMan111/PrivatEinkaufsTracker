@@ -41,7 +41,7 @@ bash offers-dashboard.sh \
 | Flag | Default | Bedeutung |
 |---|---|---|
 | `--ctid` | nächste freie ID | Container-ID |
-| `--hostname` | `offers-dashboard` | Hostname im LXC |
+| `--hostname` | `PrivateEinkaufsTracker` | Hostname im LXC |
 | `--cores` | `1` | vCPU |
 | `--memory` | `1024` | RAM in MB |
 | `--disk` | `4` | Disk in GB |

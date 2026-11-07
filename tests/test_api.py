@@ -47,6 +47,37 @@ def test_offers_current_week_and_stats(db_path):
         assert previous["total"] == 0
 
 
+def test_offers_sort_discount_vs_saving_differ(db_path):
+    """„Beste Deals" ordnet nach Prozent-Rabatt, „Höchste Ersparnis" nach Euro-Betrag."""
+    with _client(db_path) as client:
+        location = client.post(
+            "/api/locations", json={"name": "Rothenburg", "zip": "91541"}
+        ).json()
+        conn = connect(db_path)
+        retailer = conn.execute("SELECT id FROM retailers WHERE slug = 'kaufland'").fetchone()["id"]
+        week = current_week().isoformat()
+        rows = [
+            # (external_id, Titel, Preis, Streichpreis) → 50 % / 1,00 € Ersparnis
+            ("s1", "Kleine Ersparnis", 1.0, 2.0),
+            # → ~38,5 % / 50,00 € Ersparnis
+            ("s2", "Große Ersparnis", 80.0, 130.0),
+        ]
+        for external_id, title, price, old_price in rows:
+            conn.execute(
+                "INSERT INTO offers (location_id, retailer_id, source, external_id, title, price, "
+                "old_price, week_start, fetched_at) VALUES (?, ?, 'marktguru', ?, ?, ?, ?, ?, ?)",
+                (location["id"], retailer, external_id, title, price, old_price, week, utc_now()),
+            )
+        conn.commit()
+        conn.close()
+
+        discount = [o["title"] for o in client.get("/api/offers", params={"sort": "discount"}).json()["items"]]
+        saving = [o["title"] for o in client.get("/api/offers", params={"sort": "saving"}).json()["items"]]
+        assert discount[0] == "Kleine Ersparnis"
+        assert saving[0] == "Große Ersparnis"
+        assert discount != saving
+
+
 def test_merge_endpoint_combines_products(db_path):
     with _client(db_path) as client:
         location = client.post(

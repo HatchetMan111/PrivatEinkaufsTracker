@@ -19,6 +19,7 @@ set -euo pipefail
 # Variablen
 # ---------------------------------------------------------------------------
 APP="offers-dashboard"
+APP_HOSTNAME="PrivateEinkaufsTracker"
 APP_PORT="8000"
 REPO_URL="https://github.com/HatchetMan111/PrivatEinkaufsTracker"
 DEFAULT_CORES="1"
@@ -73,7 +74,7 @@ Usage:
 
 Optionen:
   --ctid ID            Container-ID (Default: nächste freie ID via pvesh)
-  --hostname NAME      Hostname (Default: ${APP})
+  --hostname NAME      Hostname (Default: ${APP_HOSTNAME})
   --cores N            vCPU (Default: ${DEFAULT_CORES})
   --memory MB          RAM in MB (Default: ${DEFAULT_RAM})
   --disk GB            Disk in GB (Default: ${DEFAULT_DISK})
@@ -94,7 +95,7 @@ EOF
 # ---------------------------------------------------------------------------
 # Argumente
 # ---------------------------------------------------------------------------
-CT_ID="$CT_ID_ARG" HOSTNAME_ARG="$APP" CORES="$CORES_ARG" RAM="$RAM_ARG" DISK="$DISK_ARG"
+CT_ID="$CT_ID_ARG" HOSTNAME_ARG="$APP_HOSTNAME" CORES="$CORES_ARG" RAM="$RAM_ARG" DISK="$DISK_ARG"
 STORAGE_ARG="" TEMPLATE_STORE="$DEFAULT_TEMPLATE_STORE" BRIDGE="$DEFAULT_BRIDGE"
 PASSWORD_ARG="" SSH_KEY_ARG=""
 while [[ $# -gt 0 ]]; do
