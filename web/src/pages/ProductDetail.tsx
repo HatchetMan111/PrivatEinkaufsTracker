@@ -1,10 +1,11 @@
-import { ArrowLeft, GitMerge, Scissors, Search } from "lucide-react";
+import { ArrowLeft, GitMerge, Scissors, Search, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,11 +14,38 @@ import {
 
 import { api, type History, type Product } from "../api";
 import { TopBar } from "../components/TopBar";
-import { formatDate, formatPrice, formatWeek } from "../format";
+import { useToast } from "../components/Toast";
+import { discountPercent, formatDate, formatPrice, formatWeek, retailerColor } from "../format";
+
+type TooltipEntry = { value?: number | string; dataKey?: string | number; name?: string | number };
+
+function PriceTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <div className="mb-1 font-semibold">Woche {label}</div>
+      {payload.map((entry) => (
+        <div key={String(entry.dataKey)} className="flex items-center justify-between gap-4">
+          <span className="text-muted">{entry.dataKey === "avg_price" ? "Ø Preis" : "Niedrigster"}</span>
+          <span className="font-medium">{formatPrice(Number(entry.value))}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function ProductDetail() {
   const { id } = useParams();
   const productId = Number(id);
+  const toast = useToast();
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +53,6 @@ export function ProductDetail() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,29 +83,28 @@ export function ProductDetail() {
 
   const merge = async (sourceId: number) => {
     setBusy(true);
-    setNotice(null);
     try {
       await api.merge(productId, [sourceId]);
-      setNotice("Produkte zusammengeführt.");
+      toast.success("Produkte zusammengeführt.");
       setMergeOpen(false);
       setSearch("");
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
   const split = async (offerId: number) => {
+    if (!window.confirm("Dieses Angebot in ein eigenes Produkt abtrennen?")) return;
     setBusy(true);
-    setNotice(null);
     try {
       const result = await api.split(productId, [offerId]);
-      setNotice(`Angebot abgetrennt (neues Produkt #${result.new_product_id}).`);
+      toast.success(`Angebot abgetrennt (neues Produkt #${result.new_product_id}).`);
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -86,13 +112,25 @@ export function ProductDetail() {
 
   const product = history?.product;
   const weeks = history?.weeks ?? [];
+  const points = history?.points ?? [];
+  const imageUrl = points.find((point) => point.image_url)?.image_url ?? null;
+
+  const currentPrice = weeks.length > 0 ? weeks[weeks.length - 1].min_price : null;
+  const lowest = weeks.length > 0 ? Math.min(...weeks.map((week) => week.min_price)) : null;
+  const highest = weeks.length > 0 ? Math.max(...weeks.map((week) => week.min_price)) : null;
+  const average =
+    weeks.length > 0 ? weeks.reduce((sum, week) => sum + week.avg_price, 0) / weeks.length : null;
+
   const chartData = weeks.map((week) => ({ ...week, label: week.week_start.slice(5) }));
 
   return (
     <div className="min-h-screen">
       <TopBar />
       <main className="mx-auto max-w-5xl px-4 pb-16 pt-8 sm:px-6">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink dark:hover:text-white">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted transition hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
           <ArrowLeft size={15} /> Zurück zur Übersicht
         </Link>
 
@@ -103,32 +141,34 @@ export function ProductDetail() {
         )}
 
         {loading ? (
-          <div className="surface mt-6 h-64 animate-pulse" />
+          <div className="surface mt-6 h-64 animate-pulse bg-ink/[.02] dark:bg-white/[.03]" />
         ) : !product ? (
           <div className="surface mt-6 p-8 text-sm text-muted">Produkt nicht gefunden.</div>
         ) : (
           <>
-            <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
-                  {product.retailer_name}
-                </p>
-                <h1 className="mt-1 font-display text-3xl tracking-tight">{product.canonical_name}</h1>
-                <p className="mt-1 text-sm text-muted">
-                  {product.brand ? `${product.brand} · ` : ""}
-                  {weeks.length} {weeks.length === 1 ? "Woche" : "Wochen"} im Verlauf
-                </p>
+            <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-4">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={product.canonical_name}
+                    className="h-20 w-20 shrink-0 rounded-2xl border border-line bg-surface2 object-contain p-1.5"
+                  />
+                ) : null}
+                <div>
+                  <p className="eyebrow">{product.retailer_name}</p>
+                  <h1 className="mt-1 font-display text-3xl tracking-tight">{product.canonical_name}</h1>
+                  <p className="mt-1 text-sm text-muted">
+                    {product.brand ? `${product.brand} · ` : ""}
+                    {weeks.length} {weeks.length === 1 ? "Woche" : "Wochen"} im Verlauf
+                  </p>
+                </div>
               </div>
-              <button type="button" className="btn" onClick={() => setMergeOpen((value) => !value)}>
-                <GitMerge size={15} /> Zusammenführen
+              <button type="button" className="btn w-fit" onClick={() => setMergeOpen((value) => !value)}>
+                {mergeOpen ? <X size={15} /> : <GitMerge size={15} />}
+                {mergeOpen ? "Abbrechen" : "Zusammenführen"}
               </button>
             </div>
-
-            {notice && (
-              <div className="mt-4 rounded-2xl border border-accent/30 bg-accentsoft px-4 py-3 text-sm text-accent dark:bg-accent/10 dark:text-[#bfe3d2]">
-                {notice}
-              </div>
-            )}
 
             {mergeOpen && (
               <div className="surface mt-4 p-4">
@@ -151,20 +191,35 @@ export function ProductDetail() {
                         type="button"
                         disabled={busy}
                         onClick={() => merge(item.id)}
-                        className="flex w-full items-center justify-between rounded-xl border border-line px-3 py-2 text-left text-sm transition hover:border-accent/40 hover:bg-accentsoft/50 dark:border-[#2a2926] dark:hover:bg-white/5"
+                        className="flex w-full items-center justify-between rounded-xl border border-line px-3 py-2 text-left text-sm transition hover:border-accent/40 hover:bg-accentsoft/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-60"
                       >
-                        <span>
-                          <span className="font-medium">{item.canonical_name}</span>
-                          <span className="ml-2 text-xs text-muted">{item.retailer_name}</span>
+                        <span className="flex items-center gap-2">
+                          <GitMerge size={14} className="shrink-0 text-muted" />
+                          <span>
+                            <span className="font-medium">{item.canonical_name}</span>
+                            <span className="ml-2 text-xs text-muted">{item.retailer_name}</span>
+                          </span>
                         </span>
                         <span className="text-xs text-muted">#{item.id}</span>
                       </button>
                     ))}
-                  {search.trim().length >= 2 && results.length === 0 && (
+                  {search.trim().length >= 2 && results.filter((item) => item.id !== productId).length === 0 && (
                     <p className="text-xs text-muted">Keine Treffer.</p>
+                  )}
+                  {search.trim().length < 2 && (
+                    <p className="text-xs text-muted">Mindestens 2 Zeichen eingeben …</p>
                   )}
                 </div>
               </div>
+            )}
+
+            {weeks.length > 0 && (
+              <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <PriceStat label="Aktuell" value={currentPrice} hint={formatWeek(weeks[weeks.length - 1].week_start)} />
+                <PriceStat label="Niedrigster" value={lowest} hint="über alle Wochen" highlight={lowest === currentPrice} />
+                <PriceStat label="Höchster" value={highest} hint="über alle Wochen" />
+                <PriceStat label="Ø Preis" value={average} hint="Wochendurchschnitt" />
+              </section>
             )}
 
             <section className="surface mt-6 p-4 sm:p-6">
@@ -174,80 +229,152 @@ export function ProductDetail() {
               {chartData.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted">Noch keine Preispunkte.</p>
               ) : (
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,115,105,.18)" />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                      <YAxis
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        width={48}
-                        tickFormatter={(value) => `${value} €`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 12,
-                          border: "1px solid #e7e2da",
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => formatPrice(Number(value))}
-                        labelFormatter={(label) => `Woche ${label}`}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="min_price"
-                        stroke="#1f5f4a"
-                        strokeWidth={2.5}
-                        dot={{ r: 3, fill: "#1f5f4a" }}
-                        activeDot={{ r: 5 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <>
+                  <div className="price-chart h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+                            {/* Farben kommen aus styles.css (#priceFill), damit der Verlauf theme-fähig ist */}
+                            <stop offset="0%" />
+                            <stop offset="100%" />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          width={48}
+                          domain={["auto", "auto"]}
+                          tickFormatter={(value) => `${value} €`}
+                        />
+                        <Tooltip content={<PriceTooltip />} />
+                        <Area
+                          type="monotone"
+                          dataKey="min_price"
+                          name="Niedrigster Preis"
+                          strokeWidth={2.5}
+                          fill="url(#priceFill)"
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="avg_price"
+                          name="Ø Preis"
+                          strokeWidth={1.5}
+                          strokeDasharray="5 4"
+                          dot={false}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-muted">
+                    <span className="flex items-center gap-1.5">
+                      <span aria-hidden className="h-2 w-4 rounded-full bg-accent" /> Niedrigster Preis der Woche
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        className="h-0 w-4 border-t-2 border-dashed border-muted"
+                      />{" "}
+                      Wochendurchschnitt
+                    </span>
+                  </div>
+                </>
               )}
             </section>
 
             <section className="surface mt-6 overflow-hidden">
-              <div className="border-b border-line px-4 py-3 dark:border-[#2a2926]">
+              <div className="border-b border-line px-4 py-3">
                 <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted">
                   Alle Angebote
                 </h2>
               </div>
-              <div className="divide-y divide-line dark:divide-[#2a2926]">
-                {(history?.points ?? []).map((point) => (
-                  <div key={point.offer_id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{formatWeek(point.week_start)}</div>
-                      <div className="text-xs text-muted">
-                        {point.retailer_name} · gültig bis {formatDate(point.valid_to)}
+              <div className="divide-y divide-line">
+                {points.map((point) => {
+                  const discount = discountPercent(point);
+                  return (
+                    <div
+                      key={point.offer_id}
+                      className="flex flex-col gap-2 px-4 py-3 transition hover:bg-ink/[.02] sm:flex-row sm:items-center sm:justify-between dark:hover:bg-white/[.03]"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: retailerColor(point.retailer_name) }}
+                          />
+                          {formatWeek(point.week_start)}
+                          {discount !== null && (
+                            <span className="rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold text-white">
+                              −{discount}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {point.retailer_name} · gültig bis {formatDate(point.valid_to)}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-base font-bold">{formatPrice(point.price)}</div>
-                        {point.old_price && (
-                          <div className="text-xs text-muted line-through">{formatPrice(point.old_price)}</div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-base font-bold">{formatPrice(point.price)}</div>
+                          {point.old_price && (
+                            <div className="text-xs text-muted line-through">{formatPrice(point.old_price)}</div>
+                          )}
+                        </div>
+                        {point.url && (
+                          <a
+                            href={point.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-medium text-muted transition hover:text-accent"
+                          >
+                            Prospekt
+                          </a>
                         )}
+                        <button
+                          type="button"
+                          className="btn px-3 py-1.5 text-xs"
+                          disabled={busy}
+                          onClick={() => split(point.offer_id)}
+                          title="Dieses Angebot in ein neues Produkt abtrennen"
+                        >
+                          <Scissors size={13} /> Abtrennen
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="btn px-3 py-1.5 text-xs"
-                        disabled={busy}
-                        onClick={() => split(point.offer_id)}
-                        title="Dieses Angebot in ein neues Produkt abtrennen"
-                      >
-                        <Scissors size={13} /> Abtrennen
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function PriceStat({
+  label,
+  value,
+  hint,
+  highlight,
+}: {
+  label: string;
+  value: number | null;
+  hint?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={`surface px-4 py-3.5 ${highlight ? "border-accent/40" : ""}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className={`mt-1 text-xl font-bold tracking-tight ${highlight ? "text-accenttext" : ""}`}>
+        {formatPrice(value)}
+      </div>
+      {hint && <div className="mt-0.5 truncate text-[11px] text-muted">{hint}</div>}
     </div>
   );
 }

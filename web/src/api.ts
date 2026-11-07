@@ -53,6 +53,7 @@ export type Stats = {
   price_drops: number;
   best_discount: {
     id: number;
+    product_id: number | null;
     title: string;
     price: number;
     old_price: number;

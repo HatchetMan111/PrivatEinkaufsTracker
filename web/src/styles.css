@@ -3,6 +3,37 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Lichtes Design – RGB-Tripletts für Tailwind-Alpha-Modifikatoren */
+    --c-paper-rgb: 250 249 247;
+    --c-surface-rgb: 255 255 255;
+    --c-surface2-rgb: 244 240 233;
+    --c-line-rgb: 231 226 218;
+    --c-ink-rgb: 28 27 25;
+    --c-muted-rgb: 111 106 97;
+    --c-accent-rgb: 31 95 74;
+    --c-accentsoft-rgb: 232 240 236;
+    --c-accenttext-rgb: 31 95 74;
+    --c-danger-rgb: 180 68 47;
+    --shadow-card: 0 1px 2px rgba(28, 27, 25, 0.05), 0 8px 24px rgba(28, 27, 25, 0.05);
+    --shadow-lift: 0 2px 4px rgba(28, 27, 25, 0.06), 0 14px 36px rgba(28, 27, 25, 0.12);
+  }
+
+  .dark {
+    --c-paper-rgb: 20 20 19;
+    --c-surface-rgb: 28 27 25;
+    --c-surface2-rgb: 33 31 28;
+    --c-line-rgb: 42 41 38;
+    --c-ink-rgb: 242 239 233;
+    --c-muted-rgb: 168 162 154;
+    --c-accent-rgb: 62 142 111;
+    --c-accentsoft-rgb: 34 54 45;
+    --c-accenttext-rgb: 191 227 210;
+    --c-danger-rgb: 224 136 104;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 36px rgba(0, 0, 0, 0.5);
+  }
+
   html {
     color-scheme: light;
   }
@@ -10,38 +41,101 @@
     color-scheme: dark;
   }
   body {
-    @apply bg-paper text-ink antialiased dark:bg-[#141413] dark:text-[#f2efe9];
+    @apply bg-paper text-ink antialiased;
     font-feature-settings: "ss01" on, "cv11" on;
   }
   ::selection {
-    @apply bg-accentsoft text-accent dark:bg-accent dark:text-white;
+    @apply bg-accentsoft text-accenttext;
   }
 }
 
 @layer components {
   .surface {
-    @apply rounded-2xl border border-line bg-white shadow-card dark:border-[#2a2926] dark:bg-[#1c1b19];
+    @apply rounded-2xl border border-line bg-surface shadow-card;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-ink/30 hover:bg-black/[.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 dark:border-[#2a2926] dark:bg-[#1c1b19] dark:text-[#f2efe9] dark:hover:bg-white/5;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-ink/30 hover:bg-ink/[.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60;
   }
   .btn-primary {
-    @apply border-accent bg-accent text-white hover:bg-[#194c3b] hover:border-[#194c3b];
+    @apply border-accent bg-accent text-white hover:opacity-90;
   }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition hover:border-ink/30 hover:text-ink dark:border-[#2a2926] dark:text-[#a8a29a] dark:hover:text-white;
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition hover:border-ink/30 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40;
   }
   .chip-active {
-    @apply border-accent bg-accentsoft text-accent dark:border-accent dark:bg-accent/20 dark:text-[#bfe3d2];
+    @apply border-accent bg-accentsoft text-accenttext;
   }
   .field {
-    @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-[#2a2926] dark:bg-[#1c1b19] dark:text-[#f2efe9];
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20;
   }
   .label {
     @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-muted;
   }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .chart-tooltip {
-  @apply rounded-xl border border-line bg-white px-3 py-2 text-xs shadow-card dark:border-[#2a2926] dark:bg-[#1c1b19];
+  @apply rounded-xl border border-line bg-surface px-3 py-2 text-xs shadow-lift;
+}
+
+/* Recharts-Farben: var() greift in SVG-Attributen nicht, daher über CSS.
+   Die Klassen hängen am Wrapper .price-chart und wechseln theme-korrekt. */
+.price-chart .recharts-cartesian-grid line {
+  stroke: rgb(var(--c-line-rgb));
+}
+.price-chart .recharts-cartesian-axis-tick-value {
+  fill: rgb(var(--c-muted-rgb));
+  font-size: 11px;
+}
+.price-chart .recharts-area-curve {
+  stroke: rgb(var(--c-accent-rgb));
+}
+.price-chart .recharts-area-dots circle {
+  fill: rgb(var(--c-accent-rgb));
+  stroke: none;
+}
+.price-chart .recharts-active-dot circle {
+  fill: rgb(var(--c-accent-rgb));
+  stroke: rgb(var(--c-surface-rgb));
+}
+.price-chart .recharts-line-curve {
+  stroke: rgb(var(--c-muted-rgb));
+}
+.price-chart .recharts-tooltip-cursor {
+  stroke: rgb(var(--c-line-rgb));
+}
+#priceFill stop:first-child {
+  stop-color: rgb(var(--c-accent-rgb));
+  stop-opacity: 0.3;
+}
+#priceFill stop:last-child {
+  stop-color: rgb(var(--c-accent-rgb));
+  stop-opacity: 0;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.18s ease-out;
 }

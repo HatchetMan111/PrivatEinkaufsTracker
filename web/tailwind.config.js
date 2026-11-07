@@ -5,20 +5,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#1c1b19",
-        paper: "#faf9f7",
-        line: "#e7e2da",
-        accent: "#1f5f4a",
-        accentsoft: "#e8f0ec",
-        muted: "#6f6a61",
-        danger: "#b4442f",
+        // Alle Tokens laufen über CSS-Variablen (styles.css) und wechseln
+        // damit automatisch zwischen hellem und dunklem Design.
+        paper: "rgb(var(--c-paper-rgb) / <alpha-value>)",
+        surface: "rgb(var(--c-surface-rgb) / <alpha-value>)",
+        surface2: "rgb(var(--c-surface2-rgb) / <alpha-value>)",
+        line: "rgb(var(--c-line-rgb) / <alpha-value>)",
+        ink: "rgb(var(--c-ink-rgb) / <alpha-value>)",
+        muted: "rgb(var(--c-muted-rgb) / <alpha-value>)",
+        accent: "rgb(var(--c-accent-rgb) / <alpha-value>)",
+        accentsoft: "rgb(var(--c-accentsoft-rgb) / <alpha-value>)",
+        accenttext: "rgb(var(--c-accenttext-rgb) / <alpha-value>)",
+        danger: "rgb(var(--c-danger-rgb) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
         display: ["Georgia", "ui-serif", "serif"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(28,27,25,.04), 0 8px 24px rgba(28,27,25,.04)",
+        card: "var(--shadow-card)",
+        lift: "var(--shadow-lift)",
       },
     },
   },

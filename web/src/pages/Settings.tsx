@@ -1,11 +1,24 @@
-import { MapPin, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+  XCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, type Location, type Retailer, type Run } from "../api";
 import { TopBar } from "../components/TopBar";
-import { formatDate } from "../format";
+import { useToast } from "../components/Toast";
+import { formatDate, formatRelative } from "../format";
 
 export function Settings() {
+  const toast = useToast();
   const [locations, setLocations] = useState<Location[]>([]);
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -16,6 +29,7 @@ export function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const pollRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -27,14 +41,56 @@ export function Settings() {
       setLocations(locationList);
       setRetailers(retailerList);
       setRuns(runList);
+      return runList;
     } catch (err) {
       setError((err as Error).message);
+      return [];
     }
   }, []);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  // Interval sauber beenden, wenn die Seite verlassen wird.
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const pollUntilDone = useCallback(
+    (onDone: (runList: Run[]) => void) => {
+      stopPolling();
+      let attempts = 0;
+      pollRef.current = window.setInterval(async () => {
+        attempts += 1;
+        const runList = await api.runs().catch(() => [] as Run[]);
+        setRuns(runList);
+        const running = runList.some((run) => run.status === "running");
+        if (!running || attempts > 40) {
+          stopPolling();
+          onDone(runList);
+        }
+      }, 3000);
+    },
+    [stopPolling]
+  );
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void (async () => {
+      const runList = await load();
+      // Läuft gerade ein Sammel-Lauf, weiter beobachten und danach aktualisieren.
+      if (runList.some((run) => run.status === "running")) {
+        setRefreshing(true);
+        pollUntilDone(() => {
+          setRefreshing(false);
+          void load();
+          toast.success("Sammel-Lauf abgeschlossen.");
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, pollUntilDone]);
 
   const resetForm = () => {
     setName("");
@@ -48,6 +104,7 @@ export function Settings() {
     setZip(location.zip);
     setSlug(location.kaufda_slug ?? "");
     setEditingId(location.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const saveLocation = async (event: React.FormEvent) => {
@@ -63,13 +120,15 @@ export function Settings() {
       };
       if (editingId === null) {
         await api.createLocation(payload);
+        toast.success(`Ort „${payload.name}“ angelegt.`);
       } else {
         await api.updateLocation(editingId, payload);
+        toast.success("Ort gespeichert.");
       }
       resetForm();
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -80,9 +139,10 @@ export function Settings() {
     setBusy(true);
     try {
       await api.deleteLocation(id);
+      toast.success("Ort deaktiviert.");
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -93,9 +153,12 @@ export function Settings() {
     setError(null);
     try {
       await api.updateRetailer(retailer.id, retailer.active !== 1);
+      toast.success(
+        retailer.active ? `${retailer.name} deaktiviert.` : `${retailer.name} aktiviert.`
+      );
       await load();
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -106,12 +169,20 @@ export function Settings() {
     setError(null);
     try {
       await api.refresh();
-      window.setTimeout(() => {
-        void load();
+      pollUntilDone(async (runList) => {
         setRefreshing(false);
-      }, 6000);
+        const lastRun = runList[0];
+        if (lastRun?.status === "failed") {
+          toast.error("Sammel-Lauf fehlgeschlagen.");
+        } else if (lastRun?.status === "partial") {
+          toast.success("Sammel-Lauf fertig – einige Quellen lieferten keine Daten.");
+        } else {
+          toast.success("Angebote aktualisiert.");
+        }
+        await load();
+      });
     } catch (err) {
-      setError((err as Error).message);
+      toast.error((err as Error).message);
       setRefreshing(false);
     }
   };
@@ -137,11 +208,11 @@ export function Settings() {
             <span className="text-xs text-muted">{locations.filter((item) => item.active).length} aktiv</span>
           </div>
 
-          <div className="mt-4 divide-y divide-line dark:divide-[#2a2926]">
+          <div className="mt-4 divide-y divide-line">
             {locations.map((location) => (
               <div key={location.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-accentsoft text-accent dark:bg-accent/20">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-accentsoft text-accenttext">
                     <MapPin size={15} />
                   </span>
                   <div>
@@ -217,7 +288,7 @@ export function Settings() {
                 {editingId === null ? "Hinzufügen" : "Speichern"}
               </button>
               {editingId !== null && (
-                <button type="button" className="btn px-3" onClick={resetForm}>
+                <button type="button" className="btn px-3" onClick={resetForm} aria-label="Bearbeiten abbrechen">
                   <X size={15} />
                 </button>
               )}
@@ -234,7 +305,7 @@ export function Settings() {
             {retailers.map((retailer) => (
               <div
                 key={retailer.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-sm dark:border-[#2a2926]"
+                className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2.5 text-sm"
               >
                 <div>
                   <div className={`font-medium ${retailer.active ? "" : "text-muted line-through"}`}>
@@ -244,14 +315,12 @@ export function Settings() {
                     {retailer.source}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn px-2.5 py-1 text-xs"
+                <Switch
+                  checked={retailer.active === 1}
                   disabled={busy}
-                  onClick={() => toggleRetailer(retailer)}
-                >
-                  {retailer.active ? "Deaktivieren" : "Aktivieren"}
-                </button>
+                  label={`${retailer.name} ${retailer.active ? "deaktivieren" : "aktivieren"}`}
+                  onChange={() => toggleRetailer(retailer)}
+                />
               </div>
             ))}
             {retailers.length === 0 && <p className="text-sm text-muted">Keine Händler konfiguriert.</p>}
@@ -259,19 +328,22 @@ export function Settings() {
         </section>
 
         <section className="surface mt-6 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 dark:border-[#2a2926] sm:px-6">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted">Sammel-Läufe</h2>
             <button type="button" className="btn px-3 py-1.5 text-xs" onClick={refresh} disabled={refreshing}>
               <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
               {refreshing ? "Läuft …" : "Jetzt starten"}
             </button>
           </div>
-          <div className="divide-y divide-line dark:divide-[#2a2926]">
+          <div className="divide-y divide-line">
             {runs.map((run) => (
               <div key={run.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6">
                 <div>
                   <div className="text-sm font-medium">
-                    #{run.id} · {formatDate(run.started_at)}
+                    #{run.id} · {formatRelative(run.started_at)}
+                    <span className="ml-1.5 text-xs font-normal text-muted">
+                      ({formatDate(run.started_at)})
+                    </span>
                   </div>
                   <div className="text-xs text-muted">
                     {run.trigger} · {run.items_found} Angebote
@@ -289,7 +361,8 @@ export function Settings() {
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Zeitplan</h2>
           <p className="mt-2">
             Der Sammel-Lauf startet automatisch jeden Montag um 06:00 Uhr (Europe/Berlin) über einen
-            systemd-Timer. Ein manueller Lauf ist jederzeit über „Aktualisieren“ möglich.
+            systemd-Timer. Ein manueller Lauf ist jederzeit über „Jetzt starten“ möglich – diese Seite
+            zeigt den Fortschritt automatisch an.
           </p>
         </section>
       </main>
@@ -297,16 +370,67 @@ export function Settings() {
   );
 }
 
-function StatusBadge({ status }: { status: Run["status"] }) {
-  const styles: Record<Run["status"], string> = {
-    running: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
-    ok: "bg-accentsoft text-accent dark:bg-accent/20 dark:text-[#bfe3d2]",
-    partial: "bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
-    failed: "bg-danger/10 text-danger",
-  };
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
   return (
-    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${styles[status]}`}>
-      {status}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-6 w-10 shrink-0 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? "bg-accent" : "bg-line"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+          checked ? "left-[18px]" : "left-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+function StatusBadge({ status }: { status: Run["status"] }) {
+  const styles: Record<Run["status"], { className: string; label: string; icon: React.ReactNode }> = {
+    running: {
+      className: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200",
+      label: "läuft",
+      icon: <Loader2 size={12} className="animate-spin" />,
+    },
+    ok: {
+      className: "bg-accentsoft text-accenttext",
+      label: "ok",
+      icon: <CheckCircle2 size={12} />,
+    },
+    partial: {
+      className: "bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
+      label: "teilweise",
+      icon: <AlertTriangle size={12} />,
+    },
+    failed: {
+      className: "bg-danger/10 text-danger",
+      label: "fehlgeschlagen",
+      icon: <XCircle size={12} />,
+    },
+  };
+  const style = styles[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${style.className}`}>
+      {style.icon}
+      {style.label}
     </span>
   );
 }
