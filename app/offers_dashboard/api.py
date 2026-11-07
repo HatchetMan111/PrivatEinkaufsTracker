@@ -284,8 +284,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
                 SELECT o.title, o.price, o.old_price,
                        (o.old_price - o.price) AS saving,
                        ROUND((o.old_price - o.price) * 100.0 / o.old_price) AS percent,
-                       r.name AS retailer_name, o.id
-                FROM offers o JOIN retailers r ON r.id = o.retailer_id
+                       r.name AS retailer_name, o.id, pl.product_id AS product_id
+                FROM offers o
+                JOIN retailers r ON r.id = o.retailer_id
+                LEFT JOIN product_links pl ON pl.offer_id = o.id
                 WHERE {clause} AND o.old_price IS NOT NULL AND o.old_price > o.price
                 ORDER BY (o.old_price - o.price) * 1.0 / o.old_price DESC, saving DESC LIMIT 1
                 """,
