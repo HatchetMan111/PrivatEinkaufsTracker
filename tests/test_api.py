@@ -9,6 +9,47 @@ def _client(db_path):
     return TestClient(create_app(db_path))
 
 
+def test_refresh_guard_and_stale_heal(db_path, monkeypatch):
+    """Doppellauf wird abgewiesen; ein hängender Lauf wird geheilt statt blockiert."""
+    started = []
+    monkeypatch.setattr(
+        "offers_dashboard.api.run_collection",
+        lambda *args, **kwargs: started.append(args),
+    )
+    with _client(db_path) as client:
+        client.post("/api/locations", json={"name": "Rothenburg", "zip": "91541"})
+
+        # Frischer 'running'-Lauf -> 409, kein neuer Lauf.
+        conn = connect(db_path)
+        conn.execute(
+            "INSERT INTO runs (started_at, status, trigger) VALUES (?, 'running', 'manual')",
+            (utc_now(),),
+        )
+        conn.commit()
+        conn.close()
+        response = client.post("/api/refresh")
+        assert response.status_code == 409
+        assert started == []
+
+        # Alter hängender Lauf (30 min) -> Auto-Heal auf failed, neuer Lauf startet.
+        from datetime import UTC, datetime, timedelta
+
+        old_started = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+        conn = connect(db_path)
+        conn.execute("UPDATE runs SET started_at = ? WHERE status = 'running'", (old_started,))
+        conn.commit()
+        conn.close()
+        response = client.post("/api/refresh")
+        assert response.status_code == 202
+        assert len(started) == 1
+
+        runs = client.get("/api/runs").json()
+        assert runs
+        assert all(run["status"] != "running" for run in runs)
+        healed = [run for run in runs if "automatisch geschlossen" in (run["error"] or "")]
+        assert healed and healed[0]["status"] == "failed"
+
+
 def test_health_and_locations(db_path):
     with _client(db_path) as client:
         assert client.get("/api/health").json()["status"] == "ok"

@@ -130,84 +130,108 @@ def run_collection(
 
     errors: list[str] = []
     found = 0
-    for loc_row in locations:
-        location = Location(
-            id=loc_row["id"],
-            name=loc_row["name"],
-            zip=loc_row["zip"],
-            kaufda_slug=loc_row["kaufda_slug"],
-        )
-        for ret_row in retailers:
-            retailer = Retailer(
-                id=ret_row["id"],
-                name=ret_row["name"],
-                slug=ret_row["slug"],
-                source=ret_row["source"],
-            )
-            source = retailer.source
-            other = "kaufda" if source == "marktguru" else "marktguru"
-            primary_error: Exception | None = None
-            offers: list[RawOffer] = []
-            # Primärquelle versuchen. Fehler werden gemerkt, damit trotzdem die
-            # Zweitquelle greifen kann – wichtig, wenn marktguru z. B. mit 403/429
-            # antwortet: dann sollen Kaufland/Lidl nicht komplett verschwinden.
-            try:
-                offers = _fetch_with(source, adapter_overrides, location, retailer)
-            except Exception as exc:  # noqa: BLE001 - Quelle isoliert behandeln
-                primary_error = exc
-                if trigger == "manual":
-                    traceback.print_exc(file=sys.stderr)
-            if not offers:
-                try:
-                    offers = _fetch_with(other, adapter_overrides, location, retailer)
-                except Exception as exc:  # noqa: BLE001 - auch die Zweitquelle isolieren
-                    detail = f"{type(exc).__name__}: {exc}"
-                    if primary_error is not None:
-                        detail = f"{source}: {primary_error}; {other}: {detail}"
-                    else:
-                        detail = f"{other}: {detail}"
-                    errors.append(f"{location.name}/{retailer.slug}: {detail}")
-                    conn.rollback()
-                    continue
-            if primary_error is not None:
-                if offers:
-                    errors.append(
-                        f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
-                        f"({primary_error}); Fallback {other} lieferte Daten"
-                    )
-                else:
-                    errors.append(
-                        f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
-                        f"({primary_error}); {other} ohne Ergebnisse"
-                    )
-            try:
-                for offer in offers:
-                    try:
-                        _upsert_offer(conn, run_id, location, retailer, offer)
-                        found += 1
-                    except Exception as exc:  # noqa: BLE001 - ein Angebot darf den Lauf nicht killen
-                        errors.append(f"{location.name}/{retailer.slug}: {exc}")
-                conn.commit()
-            except Exception as exc:  # noqa: BLE001 - Quelle isoliert behandeln
-                errors.append(f"{location.name}/{retailer.slug} ({source}): {exc}")
-                if trigger == "manual":
-                    traceback.print_exc(file=sys.stderr)
-                conn.rollback()
+    try:
+        locations = conn.execute(
+            "SELECT id, name, zip, kaufda_slug FROM locations WHERE active = 1 ORDER BY id"
+        ).fetchall()
+        if location_ids:
+            locations = [row for row in locations if row["id"] in set(location_ids)]
+        retailers = conn.execute(
+            "SELECT id, name, slug, source FROM retailers WHERE active = 1 ORDER BY id"
+        ).fetchall()
 
-    rebuild_price_points(conn)
-    if errors and found == 0:
-        status = "failed"
-    elif errors:
-        status = "partial"
-    else:
-        status = "ok"
-    message = "; ".join(errors)[:2000] or None
-    conn.execute(
-        "UPDATE runs SET finished_at = ?, status = ?, items_found = ?, error = ? WHERE id = ?",
-        (utc_now(), status, found, message, run_id),
-    )
-    conn.commit()
-    conn.close()
+        for loc_row in locations:
+            location = Location(
+                id=loc_row["id"],
+                name=loc_row["name"],
+                zip=loc_row["zip"],
+                kaufda_slug=loc_row["kaufda_slug"],
+            )
+            for ret_row in retailers:
+                retailer = Retailer(
+                    id=ret_row["id"],
+                    name=ret_row["name"],
+                    slug=ret_row["slug"],
+                    source=ret_row["source"],
+                )
+                source = retailer.source
+                other = "kaufda" if source == "marktguru" else "marktguru"
+                primary_error: Exception | None = None
+                offers: list[RawOffer] = []
+                # Primärquelle versuchen. Fehler werden gemerkt, damit trotzdem die
+                # Zweitquelle greifen kann – wichtig, wenn marktguru z. B. mit 403/429
+                # antwortet: dann sollen Kaufland/Lidl nicht komplett verschwinden.
+                try:
+                    offers = _fetch_with(source, adapter_overrides, location, retailer)
+                except Exception as exc:  # noqa: BLE001 - Quelle isoliert behandeln
+                    primary_error = exc
+                    if trigger == "manual":
+                        traceback.print_exc(file=sys.stderr)
+                if not offers:
+                    try:
+                        offers = _fetch_with(other, adapter_overrides, location, retailer)
+                    except Exception as exc:  # noqa: BLE001 - auch die Zweitquelle isolieren
+                        detail = f"{type(exc).__name__}: {exc}"
+                        if primary_error is not None:
+                            detail = f"{source}: {primary_error}; {other}: {detail}"
+                        else:
+                            detail = f"{other}: {detail}"
+                        errors.append(f"{location.name}/{retailer.slug}: {detail}")
+                        conn.rollback()
+                        continue
+                if primary_error is not None:
+                    if offers:
+                        errors.append(
+                            f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
+                            f"({primary_error}); Fallback {other} lieferte Daten"
+                        )
+                    else:
+                        errors.append(
+                            f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
+                            f"({primary_error}); {other} ohne Ergebnisse"
+                        )
+                try:
+                    for offer in offers:
+                        try:
+                            _upsert_offer(conn, run_id, location, retailer, offer)
+                            found += 1
+                        except Exception as exc:  # noqa: BLE001 - ein Angebot darf den Lauf nicht killen
+                            errors.append(f"{location.name}/{retailer.slug}: {exc}")
+                    conn.commit()
+                except Exception as exc:  # noqa: BLE001 - Quelle isoliert behandeln
+                    errors.append(f"{location.name}/{retailer.slug} ({source}): {exc}")
+                    if trigger == "manual":
+                        traceback.print_exc(file=sys.stderr)
+                    conn.rollback()
+
+        rebuild_price_points(conn)
+        if errors and found == 0:
+            status = "failed"
+        elif errors:
+            status = "partial"
+        else:
+            status = "ok"
+        message = "; ".join(errors)[:2000] or None
+        conn.execute(
+            "UPDATE runs SET finished_at = ?, status = ?, items_found = ?, error = ? WHERE id = ?",
+            (utc_now(), status, found, message, run_id),
+        )
+        conn.commit()
+    except Exception as exc:
+        # Lauf sauber abschließen, damit kein status='running' hängen bleibt
+        # und Frontend-Pollings endlos weiterlaufen.
+        conn.rollback()
+        try:
+            conn.execute(
+                "UPDATE runs SET finished_at = ?, status = 'failed', error = ? WHERE id = ?",
+                (utc_now(), f"Lauf abgebrochen: {type(exc).__name__}: {exc}"[:2000], run_id),
+            )
+            conn.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        conn.close()
     return run_id
 
 

@@ -3,7 +3,13 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 function useTheme() {
-  const [dark, setDark] = useState<boolean>(() => localStorage.getItem("theme") === "dark");
+  const [dark, setDark] = useState<boolean>(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark") return true;
+    if (stored === "light") return false;
+    // Erstbesuch: Systempräferenz respektieren.
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);

@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from offers_dashboard.adapters import RawOffer
 from offers_dashboard.collect import run_collection
 from offers_dashboard.db import connect, init_db, utc_now
@@ -152,3 +154,26 @@ def test_collection_does_not_fallback_for_disabled_retailers(db_path):
     }
     assert "lidl" not in retailers
     conn.close()
+
+
+def test_run_collection_marks_failed_on_crash(db_path, monkeypatch):
+    """Bricht der Lauf mittendrin ab, darf kein status='running' hängen bleiben."""
+    def boom(conn):
+        raise RuntimeError("rebuild kaputt")
+
+    monkeypatch.setattr("offers_dashboard.collect.rebuild_price_points", boom)
+
+    conn = init_db(db_path)
+    conn.execute(
+        "INSERT INTO locations (name, zip, active, created_at) VALUES ('Test', '91541', 1, ?)",
+        (utc_now(),),
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError):
+        run_collection(db_path)
+
+    row = connect(db_path).execute("SELECT status, error FROM runs").fetchone()
+    assert row["status"] == "failed"
+    assert "rebuild kaputt" in row["error"]

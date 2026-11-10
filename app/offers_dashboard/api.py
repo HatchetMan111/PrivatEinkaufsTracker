@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ from .collect import run_collection
 from .config import get_settings
 from .db import connect, init_db, utc_now
 from .matching import merge_products, split_offers
-from .week import resolve_week
+from .week import parse_datetime, resolve_week
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB_DIST = ROOT / "web" / "dist"
@@ -470,6 +470,34 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     @app.post("/api/refresh", status_code=202)
     def refresh(background: BackgroundTasks) -> dict[str, str]:
+        # Doppelstart-Schutz: läuft bereits ein Lauf (frisch gestartet), keinen
+        # zweiten anwerfen. Ein hängengebliebener Lauf (Crash/Reboot, >15 min
+        # ohne Abschluss) wird als fehlgeschlagen geschlossen und der neue
+        # Lauf startet trotzdem.
+        conn = db()
+        try:
+            running = conn.execute(
+                "SELECT id, started_at FROM runs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if running is not None:
+                started = parse_datetime(running["started_at"])
+                if started is not None and started.tzinfo is None:
+                    started = started.replace(tzinfo=UTC)
+                now = datetime.now(UTC)
+                stale = started is None or (now - started).total_seconds() > 15 * 60
+                if not stale:
+                    raise HTTPException(status_code=409, detail="Ein Sammel-Lauf läuft bereits.")
+                conn.execute(
+                    "UPDATE runs SET finished_at = ?, status = 'failed', error = ? WHERE id = ?",
+                    (
+                        utc_now(),
+                        "Lauf hing über 15 Minuten ohne Abschluss und wurde automatisch geschlossen.",
+                        running["id"],
+                    ),
+                )
+                conn.commit()
+        finally:
+            conn.close()
         background.add_task(run_collection, database, None, "manual")
         return {"status": "started"}
 

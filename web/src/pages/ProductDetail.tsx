@@ -113,7 +113,9 @@ export function ProductDetail() {
   const product = history?.product;
   const weeks = history?.weeks ?? [];
   const points = history?.points ?? [];
-  const imageUrl = points.find((point) => point.image_url)?.image_url ?? null;
+  // Bild des neuesten Punkts nehmen (points sind nach week_start aufsteigend).
+  const withImage = points.filter((point) => point.image_url);
+  const imageUrl = withImage.length > 0 ? withImage[withImage.length - 1].image_url : null;
 
   const currentPrice = weeks.length > 0 ? weeks[weeks.length - 1].min_price : null;
   const lowest = weeks.length > 0 ? Math.min(...weeks.map((week) => week.min_price)) : null;
