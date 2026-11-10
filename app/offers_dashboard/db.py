@@ -55,9 +55,13 @@ def migrate(conn: sqlite3.Connection) -> None:
 
 def seed_retailers(conn: sqlite3.Connection) -> None:
     for name, slug, source in DEFAULT_RETAILERS:
+        # Kanonische Werte durchsetzen, damit eine bestehende Datenbank nach
+        # einem Quellenwechsel (oder einer älteren/verstellten Zeile) nicht
+        # stillschweigend den falschen Adapter nutzt. ``active`` bleibt erhalten.
         conn.execute(
             "INSERT INTO retailers (name, slug, source, active) VALUES (?, ?, ?, 1) "
-            "ON CONFLICT(slug) DO NOTHING",
+            "ON CONFLICT(slug) DO UPDATE SET "
+            "name = excluded.name, source = excluded.source",
             (name, slug, source),
         )
     conn.commit()

@@ -15,6 +15,28 @@ from .matching import assign_product, rebuild_price_points
 ADAPTERS = {"marktguru": MarktguruAdapter, "kaufda": KaufdaAdapter}
 
 
+def _fetch_with(
+    source: str,
+    overrides: dict[str, object] | None,
+    location: Location,
+    retailer: Retailer,
+) -> list[RawOffer]:
+    """Holt Angebote mit dem Adapter der Quelle und schliesst ihn wieder.
+
+    Ein per ``adapter_overrides`` injizierter Adapter wird nicht geschlossen,
+    weil er meist von mehreren Läufen geteilt wird.
+    """
+    overridden = (overrides or {}).get(source)
+    adapter = overridden or ADAPTERS[source]()
+    try:
+        return adapter.fetch(location, retailer)
+    finally:
+        if overridden is None:
+            close = getattr(adapter, "close", None)
+            if close is not None:
+                close()
+
+
 def _upsert_offer(conn, run_id: int, location: Location, retailer: Retailer, offer: RawOffer) -> int:
     now = utc_now()
     week = offer.week_start.isoformat() if offer.week_start else None
@@ -123,15 +145,42 @@ def run_collection(
                 source=ret_row["source"],
             )
             source = retailer.source
-            adapter = None
-            fallback = None
+            other = "kaufda" if source == "marktguru" else "marktguru"
+            primary_error: Exception | None = None
+            offers: list[RawOffer] = []
+            # Primärquelle versuchen. Fehler werden gemerkt, damit trotzdem die
+            # Zweitquelle greifen kann – wichtig, wenn marktguru z. B. mit 403/429
+            # antwortet: dann sollen Kaufland/Lidl nicht komplett verschwinden.
             try:
-                adapter = (adapter_overrides or {}).get(source) or ADAPTERS[source]()
-                offers = adapter.fetch(location, retailer)
-                if not offers:
-                    other = "kaufda" if source == "marktguru" else "marktguru"
-                    fallback = (adapter_overrides or {}).get(other) or ADAPTERS[other]()
-                    offers = fallback.fetch(location, retailer)
+                offers = _fetch_with(source, adapter_overrides, location, retailer)
+            except Exception as exc:  # noqa: BLE001 - Quelle isoliert behandeln
+                primary_error = exc
+                if trigger == "manual":
+                    traceback.print_exc(file=sys.stderr)
+            if not offers:
+                try:
+                    offers = _fetch_with(other, adapter_overrides, location, retailer)
+                except Exception as exc:  # noqa: BLE001 - auch die Zweitquelle isolieren
+                    detail = f"{type(exc).__name__}: {exc}"
+                    if primary_error is not None:
+                        detail = f"{source}: {primary_error}; {other}: {detail}"
+                    else:
+                        detail = f"{other}: {detail}"
+                    errors.append(f"{location.name}/{retailer.slug}: {detail}")
+                    conn.rollback()
+                    continue
+            if primary_error is not None:
+                if offers:
+                    errors.append(
+                        f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
+                        f"({primary_error}); Fallback {other} lieferte Daten"
+                    )
+                else:
+                    errors.append(
+                        f"{location.name}/{retailer.slug}: {source} fehlgeschlagen "
+                        f"({primary_error}); {other} ohne Ergebnisse"
+                    )
+            try:
                 for offer in offers:
                     try:
                         _upsert_offer(conn, run_id, location, retailer, offer)
@@ -144,14 +193,6 @@ def run_collection(
                 if trigger == "manual":
                     traceback.print_exc(file=sys.stderr)
                 conn.rollback()
-            finally:
-                if adapter is fallback:
-                    adapter = None
-                for item in (adapter, fallback):
-                    if item is not None:
-                        close = getattr(item, "close", None)
-                        if close is not None:
-                            close()
 
     rebuild_price_points(conn)
     if errors and found == 0:

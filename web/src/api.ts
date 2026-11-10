@@ -113,6 +113,41 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function queryString(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  });
+  return search.toString();
+}
+
+const OFFERS_PAGE_SIZE = 250;
+const OFFERS_MAX_ITEMS = 5000;
+
+/* Lädt alle Seiten. Vorher holte das Dashboard nur die ersten 200 Treffer –
+   bei Sortierung nach Rabatt konnten dadurch ganze Händler (z. B. Kaufland)
+   aus der Liste fallen, obwohl ihre Angebote in der Datenbank stehen. */
+async function allOffers(
+  params: Record<string, string | number | undefined>
+): Promise<OffersResponse> {
+  const items: Offer[] = [];
+  let total = 0;
+  let weekStart = "";
+  let offset = 0;
+  while (offset < OFFERS_MAX_ITEMS) {
+    const page = await request<OffersResponse>(
+      `/api/offers?${queryString({ ...params, limit: OFFERS_PAGE_SIZE, offset })}`
+    );
+    weekStart = page.week_start;
+    total = page.total;
+    if (page.items.length === 0) break;
+    items.push(...page.items);
+    offset += page.items.length;
+    if (items.length >= total) break;
+  }
+  return { week_start: weekStart, total, items };
+}
+
 export const api = {
   locations: () => request<Location[]>("/api/locations"),
   createLocation: (payload: { name: string; zip: string; kaufda_slug?: string | null }) =>
@@ -127,20 +162,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ active }),
     }),
-  offers: (params: Record<string, string | number | undefined>) => {
-    const search = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== "") search.set(key, String(value));
-    });
-    return request<OffersResponse>(`/api/offers?${search.toString()}`);
-  },
-  stats: (params: Record<string, string | number | undefined>) => {
-    const search = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== "") search.set(key, String(value));
-    });
-    return request<Stats>(`/api/stats?${search.toString()}`);
-  },
+  offers: (params: Record<string, string | number | undefined>) =>
+    request<OffersResponse>(`/api/offers?${queryString(params)}`),
+  allOffers,
+  stats: (params: Record<string, string | number | undefined>) =>
+    request<Stats>(`/api/stats?${queryString(params)}`),
   runs: () => request<Run[]>("/api/runs"),
   refresh: () => request<{ status: string }>("/api/refresh", { method: "POST" }),
   products: (q: string) =>

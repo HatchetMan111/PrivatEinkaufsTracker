@@ -120,7 +120,7 @@ export function Dashboard() {
         sort,
       };
       const [offersResponse, statsResponse] = await Promise.all([
-        api.offers(params),
+        api.allOffers(params),
         api.stats({ location_id: selectedLocation, week }),
       ]);
       setOffers(offersResponse);

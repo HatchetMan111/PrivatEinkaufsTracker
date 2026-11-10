@@ -21,6 +21,20 @@ def test_retailers_are_seeded(conn):
     assert sources["hornbach"] == "kaufda"
 
 
+def test_seed_repairs_existing_retailer_source(db_path):
+    """Eine alte/verstellte Zeile darf einen Händler nicht dauerhaft lahmlegen."""
+    conn = init_db(db_path)
+    conn.execute("UPDATE retailers SET source = 'kaufda', name = 'Alt' WHERE slug = 'kaufland'")
+    conn.commit()
+    conn.close()
+
+    conn = init_db(db_path)
+    row = conn.execute("SELECT name, source FROM retailers WHERE slug = 'kaufland'").fetchone()
+    assert row["name"] == "Kaufland"
+    assert row["source"] == "marktguru"
+    conn.close()
+
+
 def test_migrate_is_idempotent(db_path):
     first = init_db(db_path)
     first.close()

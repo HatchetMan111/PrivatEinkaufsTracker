@@ -34,6 +34,28 @@ class FakeKaufda:
         return []
 
 
+class BrokenMarktguru:
+    def fetch(self, location, retailer):
+        raise RuntimeError("marktguru nicht erreichbar")
+
+
+class FakeKaufdaWithOffers:
+    def fetch(self, location, retailer):
+        if retailer.slug != "kaufland":
+            return []
+        return [
+            RawOffer(
+                external_id="fallback-1",
+                title="Fallback-Produkt",
+                price=1.49,
+                old_price=2.49,
+                valid_from="2026-11-01T23:00:00Z",
+                valid_to="2026-11-07T18:00:00Z",
+                week_start=date(2026, 11, 2),
+            )
+        ]
+
+
 def test_collection_is_idempotent(db_path):
     conn = init_db(db_path)
     conn.execute(
@@ -73,4 +95,60 @@ def test_collection_updates_price_for_same_offer(db_path):
     conn = connect(db_path)
     price = conn.execute("SELECT price FROM offers").fetchone()["price"]
     assert price == 1.49
+    conn.close()
+
+
+def test_collection_falls_back_when_primary_source_errors(db_path):
+    """Ist marktguru blockiert (403/429), muss kaufda einspringen statt auszufallen."""
+    conn = init_db(db_path)
+    conn.execute(
+        "INSERT INTO locations (name, zip, active, created_at) VALUES ('Test', '91541', 1, ?)",
+        (utc_now(),),
+    )
+    conn.commit()
+    conn.close()
+
+    run_id = run_collection(
+        db_path,
+        trigger="manual",
+        adapter_overrides={"marktguru": BrokenMarktguru(), "kaufda": FakeKaufdaWithOffers()},
+    )
+
+    conn = connect(db_path)
+    offers = conn.execute(
+        "SELECT o.title, r.slug FROM offers o JOIN retailers r ON r.id = o.retailer_id"
+    ).fetchall()
+    titles = {row["title"] for row in offers}
+    assert "Fallback-Produkt" in titles
+    run = conn.execute("SELECT status, error FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert run["status"] == "partial"
+    assert "marktguru" in (run["error"] or "")
+    conn.close()
+
+
+def test_collection_does_not_fallback_for_disabled_retailers(db_path):
+    """Nur aktive Händler werden abgefragt; der Fallback darf sie nicht reaktivieren."""
+    conn = init_db(db_path)
+    conn.execute(
+        "INSERT INTO locations (name, zip, active, created_at) VALUES ('Test', '91541', 1, ?)",
+        (utc_now(),),
+    )
+    conn.execute("UPDATE retailers SET active = 0 WHERE slug = 'lidl'")
+    conn.commit()
+    conn.close()
+
+    run_collection(
+        db_path,
+        trigger="manual",
+        adapter_overrides={"marktguru": BrokenMarktguru(), "kaufda": FakeKaufdaWithOffers()},
+    )
+
+    conn = connect(db_path)
+    retailers = {
+        row["slug"]
+        for row in conn.execute(
+            "SELECT r.slug FROM offers o JOIN retailers r ON r.id = o.retailer_id"
+        )
+    }
+    assert "lidl" not in retailers
     conn.close()
